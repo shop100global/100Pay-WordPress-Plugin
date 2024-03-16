@@ -1,6 +1,6 @@
 <?php
 /*
-100Pay Checkout Plugin: Load URL Plugin
+Plugin Name: 100Pay Checkout Plugin
 
 Plugin URI: https://100pay.co/ 
 
@@ -10,7 +10,7 @@ Version: 0.1
 
 Author: Chika Precious Benjamin 
 
-Author URI: 
+Author URI: https://100pay.co/
 
 License: GPLv2 or later 
 
