@@ -25,20 +25,6 @@ function add_100Pay_gateway_class() {
     return $gateways;
 }
 
-// Generate Ref ID , Accepts Business Name
-// function generate_ref($name) {
-    
-//     $name = strtoupper($name);
-
-//     $date = date("Ymd");
-
-//     $random_part = substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil(8/strlen($x)) )),1,8);
-
-//     $ref_id = $name . '_' . $date . '_' . $random_part;
-
-//     return $ref_id;
-// }
-
 
 add_action( 'plugins_loaded', 'init_100Pay_gateway_class');
 function init_100Pay_gateway_class() {
@@ -117,22 +103,90 @@ function init_100Pay_gateway_class() {
             // if ( empty( $order ) ) {
             //     return new WP_Error('', __('','') );
             // }
-            // $first_name = $order->get_first_name();
-            // $last_name = $order->get_last_name();
-            // $email = $order->get_email();
-            // $country = $order->get_country();
-            // $country_symbol = $order->get_country_symbol();
-            // $currency = $order->get_currency();
-            // $currency_symbol = $order->get_currency_symbol();
-            // $amount = $order->get_amount();
-            // $vat = $order->get_vat();
+            $first_name = $order->get_first_name();
+            $last_name = $order->get_last_name();
+            $phone = '000';
+            $email = $order->get_email();
+            $country = $order->get_country();
+            $country_symbol = $order->get_country_symbol();
+            $currency = $order->get_currency();
+            $currency_symbol = $order->get_currency_symbol();
+            $amount = $order->get_amount();
+            $vat = $order->get_vat();
 
-            // $api_key = get_option('secret_key');
-            // $business_name = get_option('business_name');
-            // $ref_id = generate_ref($business_name);
+            $api_key = get_option('secret_key');
+            $business_name = get_option('business_name');
 
-            // Use Script Tag to Execute code
+            // Load 100Pay
+            ?>
+            <div id="show100Pay"></div>
 
+            <script src="https://js.100pay.co/"></script>
+            <?php 
+
+            // Generate Payment Link
+            ?>
+            <script>
+                // Ensure shop100Pay global object exists
+                var shop100Pay = shop100Pay || {};
+
+                var firstName = "<?php echo $first_name; ?>"
+                var lastName = "<?php echo $last_name ?>"
+                var DateInstance = new Date();
+                var currentDate = `${DateInstance.getFullYear()}${DateInstance.getMonth() + 1}${DateInstance.getDate}`
+                var businessName = "<?php echo $business_name ?>"
+                
+                function generateRandomAlphanumeric(length) {
+                    var result = '';
+                    var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                    var charactersLength = characters.length;
+                    for (var i = 0; i < length; i++) {
+                        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+                    }
+                    return result;
+                }
+
+                var user_ID = businessName.toUpperCase() + "-" + firstName.toUpperCase() + lastName.toUpperCase() + "-" + generateRandomAlphanumeric(8);
+
+                // Setup payment
+                shop100Pay.setup({
+                    ref_id:  user_ID,
+                    api_key: "<?php echo $api_key; ?>",
+                    customer: {
+                        user_id: user_ID,
+                        name: "<?php echo $first_name . ' ' . $last_name; ?>",
+                        phone: "<?php echo $phone; ?>",
+                        email: "<?php echo $email; ?>"
+                    },
+                    billing: {
+                        amount: "<?php echo $amount; ?>",
+                        currency: "<?php echo $currency_symbol; ?>",
+                        description: "<?php echo $business_name; ?> Shop Payment",
+                        country: "<?php echo $country; ?>",
+                        vat: "<?php echo $vat; ?>", // optional
+                        pricing_type: "fixed_price" // or partial
+                    },
+                    metadata: {
+                        is_approved: "yes",
+                        order_id: "OR2", // optional
+                        charge_ref: "REF" // optional, you can add more fields
+                    },
+                    call_back_url: "http://localhost:8000/verifyorder/",
+                    onClose: function(msg) {
+                        alert("You just closed the crypto payment modal.");
+                    },
+                    onPayment: function(reference) {
+                        alert("New Payment detected with reference " + reference);
+                        // Handle payment confirmation
+                    },
+                    onError: function(error) {
+                        console.log(error);
+                        alert("Sorry, something went wrong. Please try again.");
+                    }
+                });
+            </script>
+            <?php
+            //
             $order->payment_complete();
             $order->reduce_order_stock();
 
