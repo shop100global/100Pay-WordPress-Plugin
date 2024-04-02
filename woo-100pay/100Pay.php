@@ -137,7 +137,7 @@ function init_100Pay_gateway_class() {
             // Generate a webhook url if not set
             if (empty($webhook_url)) {
                 
-                $site_domain = parse_url(home_url(), PHP_URL_HOST);
+                $site_domain = get_option('siteurl');
                 $route_value = bin2hex(random_bytes(10));
                 $webhook_url = 'https://' . $site_domain . '/webhook/' .$route_value;
                 
@@ -159,7 +159,7 @@ function init_100Pay_gateway_class() {
 
             return array(
                 'path' => $parts[0],
-                'id' => $parts[1],
+                'id' => '/' . $parts[1],
             );
         }
 
@@ -197,6 +197,7 @@ function init_100Pay_gateway_class() {
 
             if ( isset( $_GET['wp_pg'] ) ) {
                 $order_id = wc_get_order_id_by_order_key( $_GET['key'] );
+                $order_key = $_GET['key'];
                 $order = wc_get_order( $order_id );
                     
 
@@ -287,7 +288,7 @@ function init_100Pay_gateway_class() {
                         },
                         metadata: {
                             is_approved: "yes",
-                            order_id: "OR2", // optional
+                            order_id: '<?php echo $order_key; ?>', // optional
                             charge_ref: "REF" // optional, you can add more fields
                         },
                         call_back_url: "http://localhost:8000/verifyorder/",
@@ -331,9 +332,100 @@ function init_100Pay_gateway_class() {
         }
 
         public function pay100_webhook_verification( $request ) {
-            $response = 'This endpoint is working fine';
+            $order_key = $request['charge']['metadata']['order_id'];
+            $order_id = wc_get_order_id_by_order_key( $order_key );
+			$order = wc_get_order( $order_id );
 
-            return $response;
+            if ($order) {
+
+                $order_details = $order->get_data();
+    
+                $incoming_verification_token = isset($_SERVER['HTTP_VERIFICATION_TOKEN']) ? $_SERVER['HTTP_VERIFICATION_TOKEN'] : null;
+                $current_verification_token = get_option('pay100_verification_token', '');
+                $payment_status = $order_details['charge']['status']['value'];
+                $payment_amount = $order_details["charge"]["status"]["total_paid"];
+                $payment_currency = $order_details["charge"]["billing"]["currency"];
+    
+                // Check if the Incoming Verification Token matches the current Token
+                if ($incoming_verification_token != null and $incoming_verification_token == $current_verification_token) {
+                    
+                    // Compare Webhooks and Invoice Currency
+                    if ($payment_currency == $order_details["currency"]) {
+                        // Payment Completed
+                        if ($payment_amount == $order_details["total"] and $payment_status == "completed") {
+                            $new_status = 'completed';
+                            $order->set_status( $new_status );
+            
+                            $order->save();
+
+                            return new WP_REST_Response(
+                                array(
+                                    'status'=> 'success',
+                                    'remark'=> 'Payment Completed',
+                                ),
+                                200
+                            );
+                        
+                        } 
+                        // OverPaid && UnderPaid Checks
+                        elseif ( $payment_amount != $order_details["total"]) {
+                            // OverPaid
+                            if ( $payment_status == "overpaid" ) {
+                                $new_status = 'overpaid';
+                                $order->set_status( $new_status );
+                
+                                $order->save();
+
+                                return new WP_REST_Response(
+                                    array(
+                                        'status'=> 'success',
+                                        'remark'=> 'Customer Overpaid '.$order_details['charge']['status']['context']['value'],
+                                    ),
+                                    200
+                                );
+                            } 
+                            // UnderPaid
+                            elseif ( $payment_amount == "underpaid" ) {
+                                $new_status = 'underpaid';
+                                $order->set_status( $new_status );
+                
+                                $order->save();
+
+                                return new WP_REST_Response(
+                                    array(
+                                        'status'=> 'success',
+                                        'remark'=> 'Customer Underpaid '.$order_details['charge']['status']['context']['value'],
+                                    ),
+                                    200
+                                );
+                            }
+    
+                        }
+                        
+                    } elseif ($payment_amount == $order_details["currency"]) {
+                        return new WP_REST_Response( 
+                            array(
+                                "error" => "Currency Does not match",
+                            ),
+                            400
+                        );
+                    }
+    
+                    
+                } else {
+                    return new WP_REST_Response( 
+                        array(
+                            "error" => "Invalid Verification Token",
+                        ),
+                        400
+                    );
+                }
+
+            }
+
+
+
+
         }
    
     }
