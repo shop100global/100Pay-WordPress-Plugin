@@ -420,6 +420,13 @@ function init_100Pay_gateway_class() {
                     );
                 }
 
+            } else {
+                return new WP_REST_Response( 
+                    array(
+                        "error" => "Order does not exist",
+                    ),
+                    400
+                );
             }
 
 
