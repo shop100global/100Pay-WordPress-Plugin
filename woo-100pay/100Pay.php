@@ -69,6 +69,7 @@ function init_100Pay_gateway_class() {
             $this->description = $this->get_option('description');
             $this->enabled = $this->get_option('enabled');
             $this->webhook_url = $this->get_option('webhook_url');
+            $this->verification_token = $this->get_option('pay100_verification_token');
 
             // This action hook saves the settings
             add_action( 'rest_api_init', array( $this, 'register_webhooks_endpoint') );
