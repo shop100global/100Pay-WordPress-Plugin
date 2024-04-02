@@ -117,6 +117,12 @@ function init_100Pay_gateway_class() {
                     'description' => '100Pay Secret Key',
                     'default'     => ' ',
                 ),
+                'pay100_verification_token' => array(
+                    'title'       => 'Verification Token',
+                    'type'        => 'textarea',
+                    'description' => '100Pay Merchant Verification Token',
+                    'default'     => ' ',
+                ),
                 'webhook_url' => array(
                     'title'       => 'Webhook URL',
                     'type'        => 'textarea',
