@@ -18,6 +18,25 @@ Text Domain: 100pay
 
 */
 
+register_uninstall_hook(__FILE__, 'pay100_uninstall');
+
+register_deactivation_hook(__FILE__, 'pay100_deactivate');
+
+// Deactivation Function
+function pay100_deactivate() {
+    update_option('enabled', 'no');
+}
+
+// Uninstall Function
+function pay100_uninstall() {
+    delete_option('enabled');
+    delete_option('title');
+    delete_option('business_name');
+    delete_option('description');
+    delete_option('public_key');
+    delete_option('secret_key');
+}
+
 
 add_action( 'woocommerce_payment_gateways', 'add_100Pay_gateway_class' );
 function add_100Pay_gateway_class() {
@@ -49,9 +68,13 @@ function init_100Pay_gateway_class() {
             $this->title = $this->get_option('title');
             $this->description = $this->get_option('description');
             $this->enabled = $this->get_option('enabled');
+            $this->site_domain = parse_url(home_url(), PHP_URL_HOST);
+            $this->webhook_url = 'https://' . $this->site_domain . '/webhook/' .bin2hex(random_bytes(10));
 
             // This action hook saves the settings
+            add_action( 'rest_api_init', array( $this, 'register_webhooks_endpoint') );
             add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+            add_action( 'woocommerce_thankyou', array( $this, 'payment_modal_trigger' ) );
         }
 
         public function init_form_fields() {
@@ -74,7 +97,7 @@ function init_100Pay_gateway_class() {
                     'title'       => '100Pay Business Name',
                     'type'        => 'text',
                     'description' => '100Pay Business Name',
-                    'default'     => 'Null',
+                    'default'     => ' ',
                     'desc_tip'    => true,
                 ),
                 'description' => array(
@@ -85,57 +108,138 @@ function init_100Pay_gateway_class() {
                 ),
                 'public_key' => array(
                     'title'       => 'Public Key',
-                    'type'        => 'text',
+                    'type'        => 'textarea',
                     'description' => '100Pay Public Key',
-                    'default'     => 'Null',
+                    'default'     => ' ',
                 ),
                 'secret_key' => array(
                     'title'       => 'Secret Key',
-                    'type'        => 'text',
+                    'type'        => 'textarea',
                     'description' => '100Pay Secret Key',
-                    'default'     => 'Null',
+                    'default'     => ' ',
                 ),
+                'webhook_url' => array(
+                    'title'       => 'Webhook URL',
+                    'type'        => 'textarea',
+                    'description' => 'Please copy this webhook URL and paste on the webhook section on your dashboard',
+                    'default'     => $this->generate_webhook_url(),
+                    'custom_attributes' => array(
+                        'readonly' => 'readonly',
+                    ),
+                ),
+            );
+        }
+
+        public function generate_webhook_url() {
+            // Check if the webhook url is already set in the options
+            $webhook_url = $this->get_option('webhook_url');
+
+            // Generate a webhook url if not set
+            if (empty($webhook_url)) {
+                
+                $site_domain = parse_url(home_url(), PHP_URL_HOST);
+                $route_value = bin2hex(random_bytes(10));
+                $webhook_url = 'https://' . $site_domain . '/webhook/' .$route_value;
+                
+
+                // Save the webhhok URL to options
+                update_option('webhook_url', $webhook_url);
+            }
+
+            return $webhook_url;
+        }
+
+        public function split_domain_url($url) {
+
+            $parsed_url = parse_url($url);
+
+            $path = isset($parsed_url['path']) ? $parsed_url['path'] :'';
+
+            $parts = explode('/', trim($path, '/'));
+
+            return array(
+                'path' => $parts[0],
+                'id' => $parts[1],
             );
         }
 
         public function process_payment( $order_id ) {
             $order = wc_get_order( $order_id );
-            // if ( empty( $order ) ) {
-            //     return new WP_Error('', __('','') );
-            // }
-            $first_name = $order->get_first_name();
-            $last_name = $order->get_last_name();
-            $phone = '000';
-            $email = $order->get_email();
-            $country = $order->get_country();
-            $country_symbol = $order->get_country_symbol();
-            $currency = $order->get_currency();
-            $currency_symbol = $order->get_currency_symbol();
-            $amount = $order->get_amount();
-            $vat = $order->get_vat();
+            
+            
 
-            $api_key = get_option('secret_key');
-            $business_name = get_option('business_name');
+            $order->update_status( 'processing' );
 
-            // Load 100Pay
-            ?>
-            <div id="show100Pay"></div>
+            $pay_redirect_url = add_query_arg( 'wp_pg', '100Pay', $this->get_return_url( $order ) );
 
-            <script src="https://js.100pay.co/"></script>
-            <?php 
+    
+            //
+            // $order->payment_complete();
+            // $order->reduce_order_stock();
 
-            // Generate Payment Link
-            ?>
-            <script>
-                // Ensure shop100Pay global object exists
-                var shop100Pay = shop100Pay || {};
+            // $order->add_order_note( 'Hey, your order is paid! Thank You', true);
 
-                var firstName = "<?php echo $first_name; ?>"
-                var lastName = "<?php echo $last_name ?>"
-                var DateInstance = new Date();
-                var currentDate = `${DateInstance.getFullYear()}${DateInstance.getMonth() + 1}${DateInstance.getDate}`
-                var businessName = "<?php echo $business_name ?>"
+            // WC()->cart->empty_cart();
+
+            return array(
+                'result' => 'success',
+                'redirect' => $pay_redirect_url,
+            );
+            
+
+        }
+
+        public function payment_modal_trigger() {
+
+            if ( ! is_wc_endpoint_url( 'order-received' ) ) {
+                return;
+            }
+
+            if ( isset( $_GET['wp_pg'] ) ) {
+                $order_id = wc_get_order_id_by_order_key( $_GET['key'] );
+                $order = wc_get_order( $order_id );
+                    
+
+                $api_key = $this->get_option( 'secret_key' );
+                $business_name = $this->get_option( 'business_name' );
+
                 
+
+                // Generate Order Redirect URL
+                $redirect_url = $this->get_return_url( $order );
+
+                // Load 100Pay CDN
+                $js_url = 'https://js.100pay.co/';
+				$curl = curl_init();
+				
+				curl_setopt($curl, CURLOPT_URL, $js_url);
+				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+				
+				$js_content = curl_exec($curl);
+				
+				curl_close($curl);
+				
+                
+                echo <<<EOD
+                <script type='text/javascript'>$js_content</script>
+
+                <script>
+                var divTag = document.createElement('div');
+                var api_key = "{$api_key}";
+                var business_name = "{$business_name}";
+
+                
+                divTag.id = 'show100Pay';
+
+                
+                document.body.appendChild(divTag);
+
+
+                // Ensure shop100Pay global object exists
+                // var shop100Pay = shop100Pay || {};
+
+                paywith100_Pay($order)
+
                 function generateRandomAlphanumeric(length) {
                     var result = '';
                     var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -146,59 +250,90 @@ function init_100Pay_gateway_class() {
                     return result;
                 }
 
-                var user_ID = businessName.toUpperCase() + "-" + firstName.toUpperCase() + lastName.toUpperCase() + "-" + generateRandomAlphanumeric(8);
+                
+    
 
-                // Setup payment
-                shop100Pay.setup({
-                    ref_id:  user_ID,
-                    api_key: "<?php echo $api_key; ?>",
-                    customer: {
-                        user_id: user_ID,
-                        name: "<?php echo $first_name . ' ' . $last_name; ?>",
-                        phone: "<?php echo $phone; ?>",
-                        email: "<?php echo $email; ?>"
-                    },
-                    billing: {
-                        amount: "<?php echo $amount; ?>",
-                        currency: "<?php echo $currency_symbol; ?>",
-                        description: "<?php echo $business_name; ?> Shop Payment",
-                        country: "<?php echo $country; ?>",
-                        vat: "<?php echo $vat; ?>", // optional
-                        pricing_type: "fixed_price" // or partial
-                    },
-                    metadata: {
-                        is_approved: "yes",
-                        order_id: "OR2", // optional
-                        charge_ref: "REF" // optional, you can add more fields
-                    },
-                    call_back_url: "http://localhost:8000/verifyorder/",
-                    onClose: function(msg) {
-                        alert("You just closed the crypto payment modal.");
-                    },
-                    onPayment: function(reference) {
-                        alert("New Payment detected with reference " + reference);
-                        // Handle payment confirmation
-                    },
-                    onError: function(error) {
-                        console.log(error);
-                        alert("Sorry, something went wrong. Please try again.");
-                    }
-                });
-            </script>
-            <?php
-            //
-            $order->payment_complete();
-            $order->reduce_order_stock();
+                async function paywith100_Pay(order) {
 
-            $order->add_order_note( 'Hey, your order is paid! Thank You', true);
+                    // first_name, last_name, api_key, phone, email, amount, currency_symbol, business_name, country, vat
 
-            WC()->cart->empty_cart();
+                    var firstName = order.billing.first_name;
+                    var lastName = order.billing.last_name;
+                    var DateInstance = new Date();
+                    var currentDate = DateInstance.getFullYear() + (DateInstance.getMonth() + 1) + DateInstance.getDate();
+                    var businessName = business_name;
 
-            return array(
-                'result' => 'success',
-                'redirect' => $this->get_return_url( $order )
+
+                        
+                    var user_ID = businessName.toUpperCase() + "-" + firstName.toUpperCase() + lastName.toUpperCase() + "-" + generateRandomAlphanumeric(8);
+
+                    // Setup payment
+                    shop100Pay.setup({
+                        ref_id:  user_ID,
+                        api_key: api_key,
+                        customer: {
+                            user_id: order.billing.email,
+                            name: order.billing.first_name + ' ' + order.billing.last_name,
+                            phone: order.billing.phone,
+                            email: order.billing.email
+                        },
+                        billing: {
+                            amount: order.total,
+                            currency: order.currency,
+                            description: "Shop Payment",
+                            country: order.billing.country,
+                            vat: 0, // optional
+                            pricing_type: "fixed_price" // or partial
+                        },
+                        metadata: {
+                            is_approved: "yes",
+                            order_id: "OR2", // optional
+                            charge_ref: "REF" // optional, you can add more fields
+                        },
+                        call_back_url: "http://localhost:8000/verifyorder/",
+                        onClose: function(msg) {
+                            alert("You just closed the crypto payment modal.");
+                            window.location.href = '<?php echo $redirect_url; ?>'
+                        },
+                        onPayment: function(reference) {
+                            alert("New Payment detected with reference " + reference);
+                            // Handle payment confirmation
+                        },
+                        onError: function(error) {
+                            console.log(error);
+                            alert("Sorry, something went wrong. Please try again.");
+                        }
+                    });
+                }
+                </script>
+
+                EOD;
+            }
+        }
+
+        public function register_webhooks_endpoint() {
+            $url = $this->get_option('webhook_url');
+            $split_result = $this->split_domain_url( $url );
+            
+            $webhook_path = $split_result['path'];
+            $route_value = $split_result['id'];
+
+            register_rest_route(
+                $webhook_path,
+                $route_value,
+                array(
+                    'methods' => 'POST',
+                    'callback' => array( $this, 'pay100_webhook_verification' ),
+                    'permission_callback' => '__return_true',
+                ),
+
             );
+        }
 
+        public function pay100_webhook_verification( $request ) {
+            $response = 'This endpoint is working fine';
+
+            return $response;
         }
    
     }
@@ -228,4 +363,5 @@ function init_100Pay_gateway_class() {
 
     }
 }
+
 
