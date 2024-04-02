@@ -68,8 +68,7 @@ function init_100Pay_gateway_class() {
             $this->title = $this->get_option('title');
             $this->description = $this->get_option('description');
             $this->enabled = $this->get_option('enabled');
-            $this->site_domain = parse_url(home_url(), PHP_URL_HOST);
-            $this->webhook_url = 'https://' . $this->site_domain . '/webhook/' .bin2hex(random_bytes(10));
+            $this->webhook_url = $this->get_option('webhook_url');
 
             // This action hook saves the settings
             add_action( 'rest_api_init', array( $this, 'register_webhooks_endpoint') );
