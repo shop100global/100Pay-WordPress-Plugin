@@ -18,6 +18,10 @@ Text Domain: 100pay
 
 */
 
+if ( ! defined( 'ABSPATH' ) ) {
+    define( 'ABSPATH', dirname( __FILE__ ) . '/' );
+};
+
 register_uninstall_hook(__FILE__, 'pay100_uninstall');
 
 register_deactivation_hook(__FILE__, 'pay100_deactivate');
@@ -72,7 +76,8 @@ function init_100Pay_gateway_class() {
             $this->verification_token = $this->get_option('pay100_verification_token');
 
             // This action hook saves the settings
-            add_action( 'init', array( $this, 'pay100_register_product_status') );
+            add_filter( 'wc_order_statuses', array( $this, 'add_additional_custom_statuses_to_order_statuses' ) );
+            add_action( 'woocommerce_register_shop_order_post_statuses', array( $this, 'pay100_register_product_status') );
             add_action( 'rest_api_init', array( $this, 'register_webhooks_endpoint') );
             add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
             add_action( 'woocommerce_thankyou', array( $this, 'payment_modal_trigger' ) );
@@ -442,23 +447,79 @@ function init_100Pay_gateway_class() {
 
         }
 
-        public function pay100_register_product_status() {
+        public function pay100_register_product_status($order_statuses) {
 
-            register_post_status('wc-underpaid', array(
+            $order_statuses['wc-underpaid'] = array(
                 'label' => __('Underpaid'),
                 'public' => true,
                 'exclude_from_search' => false,
                 'show_in_admin_all_list' => true,
                 'label_count' => _n_noop('Underpaid <span class="count">(%s)</span>', 'Underpaid <span class="count">(%s)</span>')
-            ));
+            );
 
-            register_post_status('wc-overpaid', array(
+            $order_statuses['wc-overpaid'] = array(
                 'label' => __('Overpaid'),
                 'public' => true,
                 'exclude_from_search' => false,
                 'show_in_admin_all_list' => true,
                 'label_count' => _n_noop('Overpaid <span class="count">(%s)</span>', 'Overpaid <span class="count">(%s)</span>')
-            ));
+            );
+            
+            return $order_statuses;
+        }
+
+        
+        public function add_additional_custom_statuses_to_order_statuses( $order_statuses ) {
+
+            $order_statuses['wc-overpaid'] = 'Overpaid';
+            $order_statuses['wc-underpaid'] = 'Underpaid';
+            return $order_statuses;
+        }
+
+        public function pay100_create_payment_transaction_table() {
+            global $wpdb;
+            $charset_collate = $wpdb->get_charset_collate();
+            $table_name = $wpdb->prefix .'pay100_transactions';
+
+            $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+                id mediumint(9) NOT NULL AUTO_INCREMENT,
+                reference_id varchar(255) NOT NULL,
+                customer_id varchar(255) NOT NULL,
+                PRIMARY KEY (id)
+            ) $charset_collate;";
+
+            require_once ( ABSPATH . 'wp-admin/includes/upgrade.php' );
+            dbDelta( $sql );
+        }
+
+        public function pay100_save_transaction($customer_id, $reference_id) {
+            global $wpdb;
+
+            $table_name =  $wpdb->prefix .'pay100_transactions';
+
+            $wpdb->insert(
+                $table_name,
+                array(
+                    'reference_id' => $reference_id,
+                    'customer_id' => $customer_id
+                )
+            );
+
+        }
+
+        public function pay100_get_transaction($customer_id, $reference_id) {
+            global $wpdb;
+            $table_name = $wpdb->prefix .'pay100_transactions';
+
+            $result = $wpdb->get_results(
+                $wpdb->prepare(
+                "SELECT * FROM $table_name WHERE customer_id = %d AND reference_id = %s",
+                $customer_id,
+                $reference_id
+                )
+            );
+
+            return $result;
         }
    
     }
