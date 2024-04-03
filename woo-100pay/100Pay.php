@@ -72,6 +72,7 @@ function init_100Pay_gateway_class() {
             $this->verification_token = $this->get_option('pay100_verification_token');
 
             // This action hook saves the settings
+            add_action( 'init', array( $this, 'pay100_register_product_status') );
             add_action( 'rest_api_init', array( $this, 'register_webhooks_endpoint') );
             add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
             add_action( 'woocommerce_thankyou', array( $this, 'payment_modal_trigger' ) );
@@ -439,6 +440,25 @@ function init_100Pay_gateway_class() {
 
 
 
+        }
+
+        public function pay100_register_product_status() {
+
+            register_post_status('wc-underpaid', array(
+                'label' => __('Underpaid'),
+                'public' => true,
+                'exclude_from_search' => false,
+                'show_in_admin_all_list' => true,
+                'label_count' => _n_noop('Underpaid <span class="count">(%s)</span>', 'Underpaid <span class="count">(%s)</span>')
+            ));
+
+            register_post_status('wc-overpaid', array(
+                'label' => __('Overpaid'),
+                'public' => true,
+                'exclude_from_search' => false,
+                'show_in_admin_all_list' => true,
+                'label_count' => _n_noop('Overpaid <span class="count">(%s)</span>', 'Overpaid <span class="count">(%s)</span>')
+            ));
         }
    
     }
