@@ -22,6 +22,27 @@ if ( ! defined( 'ABSPATH' ) ) {
     define( 'ABSPATH', dirname( __FILE__ ) . '/' );
 };
 
+register_activation_hook( __FILE__, 'pay100_plugin_activation' );
+
+function pay100_plugin_activation() {
+    // Create Table
+    global $wpdb;
+    $charset_collate = $wpdb->get_charset_collate();
+    $table_name = $wpdb->prefix .'pay100_transactions';
+
+    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        reference_id varchar(255) NOT NULL,
+        customer_id varchar(255) NOT NULL,
+        PRIMARY KEY (id)
+    ) $charset_collate;";
+
+    require_once ( ABSPATH . 'wp-admin/includes/upgrade.php' );
+    dbDelta( $sql );
+
+    return true;
+}
+
 register_uninstall_hook(__FILE__, 'pay100_uninstall');
 
 register_deactivation_hook(__FILE__, 'pay100_deactivate');
@@ -59,7 +80,7 @@ function init_100Pay_gateway_class() {
             $this->id = 'pay100';
             $this->method_title = '100Pay Payment Gateway';
             $this->method_description = 'You can make your crypto payments using our payment gateway.';
-            $this->method_icon = '';
+            $this->method_icon = dirname(__FILE__) . '/image/100pay.svg';
             $this->method_version = '1.0';
             $this->supports = array(
                 'products',
@@ -144,7 +165,7 @@ function init_100Pay_gateway_class() {
 
         public function generate_webhook_url() {
             // Check if the webhook url is already set in the options
-            $webhook_url = $this->get_option('webhook_url');
+            $webhook_url = get_option('webhook_url');
 
             // Generate a webhook url if not set
             if (empty($webhook_url)) {
@@ -351,87 +372,108 @@ function init_100Pay_gateway_class() {
             if ($order) {
 
                 $order_details = $order->get_data();
-    
-                $incoming_verification_token = isset($_SERVER['HTTP_VERIFICATION_TOKEN']) ? $_SERVER['HTTP_VERIFICATION_TOKEN'] : null;
-                $current_verification_token = get_option('pay100_verification_token', '');
-                $payment_status = $order_details['charge']['status']['value'];
-                $payment_amount = $order_details["charge"]["status"]["total_paid"];
-                $payment_currency = $order_details["charge"]["billing"]["currency"];
-    
-                // Check if the Incoming Verification Token matches the current Token
-                if ($incoming_verification_token != null and $incoming_verification_token == $current_verification_token) {
-                    
-                    // Compare Webhooks and Invoice Currency
-                    if ($payment_currency == $order_details["currency"]) {
-                        // Payment Completed
-                        if ($payment_amount == $order_details["total"] and $payment_status == "completed") {
-                            $new_status = 'completed';
-                            $order->set_status( $new_status );
-            
-                            $order->save();
+                
+                $incoming_verification_token = $request->get_header('HTTP_VERIFICATION_TOKEN');
 
-                            return new WP_REST_Response(
-                                array(
-                                    'status'=> 'success',
-                                    'remark'=> 'Payment Completed',
-                                ),
-                                200
-                            );
+                $current_verification_token = $this->get_option('pay100_verification_token', '');
+                $payment_status = $request['charge']['status']['value'];
+                $payment_amount = $request["charge"]["status"]["total_paid"];
+                $payment_currency = $request["charge"]["billing"]["currency"];
+                $customer_id = $request['charge']['customer']['email'];
+                $reference_id = $request['charge']['ref_id'];
+
+                $if_ref_exist = $this->pay100_get_transaction($customer_id, $reference_id);
+
+                if ($if_ref_exist == null) {
+
+                    // Check if the Incoming Verification Token matches the current Token
+                    if ($incoming_verification_token != null and $incoming_verification_token == $current_verification_token) {
                         
-                        } 
-                        // OverPaid && UnderPaid Checks
-                        elseif ( $payment_amount != $order_details["total"]) {
-                            // OverPaid
-                            if ( $payment_status == "overpaid" ) {
-                                $new_status = 'overpaid';
+                        // Compare Webhooks and Invoice Currency
+                        if ($payment_currency == $order_details["currency"]) {
+                            // Payment Completed
+                            if ($payment_amount == $order_details["total"] and $payment_status == "completed") {
+                                $new_status = 'completed';
                                 $order->set_status( $new_status );
                 
                                 $order->save();
-
+    
+    
+                                // Save transaction to DB
+                                $this->pay100_save_transaction( $customer_id, $reference_id );
+    
                                 return new WP_REST_Response(
                                     array(
                                         'status'=> 'success',
-                                        'remark'=> 'Customer Overpaid '.$order_details['charge']['status']['context']['value'],
+                                        'remark'=> 'Payment Completed',
                                     ),
                                     200
                                 );
+                            
                             } 
-                            // UnderPaid
-                            elseif ( $payment_amount == "underpaid" ) {
-                                $new_status = 'underpaid';
-                                $order->set_status( $new_status );
-                
-                                $order->save();
-
-                                return new WP_REST_Response(
-                                    array(
-                                        'status'=> 'success',
-                                        'remark'=> 'Customer Underpaid '.$order_details['charge']['status']['context']['value'],
-                                    ),
-                                    200
-                                );
-                            }
+                            // OverPaid && UnderPaid Checks
+                            elseif ( $payment_amount != $order_details["total"]) {
+                                // OverPaid
+                                if ( $payment_status == "overpaid" ) {
+                                    $new_status = 'overpaid';
+                                    $order->set_status( $new_status );
+                    
+                                    $order->save();
     
+                                    return new WP_REST_Response(
+                                        array(
+                                            'status'=> 'success',
+                                            'remark'=> 'Customer Overpaid '.$order_details['charge']['status']['context']['value'],
+                                        ),
+                                        200
+                                    );
+                                } 
+                                // UnderPaid
+                                elseif ( $payment_amount == "underpaid" ) {
+                                    $new_status = 'underpaid';
+                                    $order->set_status( $new_status );
+                    
+                                    $order->save();
+    
+                                    return new WP_REST_Response(
+                                        array(
+                                            'status'=> 'success',
+                                            'remark'=> 'Customer Underpaid '.$order_details['charge']['status']['context']['value'],
+                                        ),
+                                        200
+                                    );
+                                }
+        
+                            }
+                            
+                        } elseif ($payment_amount == $order_details["currency"]) {
+                            return new WP_REST_Response( 
+                                array(
+                                    "error" => "Currency Does not match",
+                                ),
+                                400
+                            );
                         }
+        
                         
-                    } elseif ($payment_amount == $order_details["currency"]) {
+                    } else {
                         return new WP_REST_Response( 
                             array(
-                                "error" => "Currency Does not match",
+                                "error" => "Invalid Verification Token",
                             ),
                             400
                         );
                     }
-    
-                    
-                } else {
-                    return new WP_REST_Response( 
+                
+                } elseif ($if_ref_exist != null) {
+                    return new WP_REST_Response(
                         array(
-                            "error" => "Invalid Verification Token",
+                            "error" => "Transaction with Reference ID exists"
                         ),
                         400
                     );
                 }
+    
 
             } else {
                 return new WP_REST_Response( 
@@ -476,21 +518,6 @@ function init_100Pay_gateway_class() {
             return $order_statuses;
         }
 
-        public function pay100_create_payment_transaction_table() {
-            global $wpdb;
-            $charset_collate = $wpdb->get_charset_collate();
-            $table_name = $wpdb->prefix .'pay100_transactions';
-
-            $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-                id mediumint(9) NOT NULL AUTO_INCREMENT,
-                reference_id varchar(255) NOT NULL,
-                customer_id varchar(255) NOT NULL,
-                PRIMARY KEY (id)
-            ) $charset_collate;";
-
-            require_once ( ABSPATH . 'wp-admin/includes/upgrade.php' );
-            dbDelta( $sql );
-        }
 
         public function pay100_save_transaction($customer_id, $reference_id) {
             global $wpdb;
@@ -505,6 +532,8 @@ function init_100Pay_gateway_class() {
                 )
             );
 
+            return true;
+
         }
 
         public function pay100_get_transaction($customer_id, $reference_id) {
@@ -513,13 +542,17 @@ function init_100Pay_gateway_class() {
 
             $result = $wpdb->get_results(
                 $wpdb->prepare(
-                "SELECT * FROM $table_name WHERE customer_id = %d AND reference_id = %s",
+                "SELECT * FROM $table_name WHERE customer_id = %s AND reference_id = %s",
                 $customer_id,
                 $reference_id
                 )
             );
 
-            return $result;
+            if (!empty($result)) {
+                return $result;
+            } else {
+                return null;
+            }
         }
    
     }
