@@ -25,6 +25,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 register_activation_hook( __FILE__, 'pay100_plugin_activation' );
 
 function pay100_plugin_activation() {
+    if ( ! function_exists( 'WC' ) ) {
+        return;
+    }
+
     // Create Table
     global $wpdb;
     $charset_collate = $wpdb->get_charset_collate();
@@ -45,6 +49,23 @@ function pay100_plugin_activation() {
 
 register_uninstall_hook(__FILE__, 'pay100_uninstall');
 
+function pay100_uninstall() {
+
+
+    // Delete Transaction Data
+    global $wpdb;
+    $table_name = $wpdb->prefix .'pay100_transactions';
+    $wpdb->query("DROP TABLE IF EXISTS $table_name");
+
+    // Delete Option
+
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name IN ('pay_100_enabled', 'pay_100_business_name', 'pay_100_public_key', 'pay_100_secret_key', 'pay100_verification_token')");
+
+
+    // Delete Plugin Settings
+    delete_option('woocommerce_pay100_settings');
+}
+
 register_deactivation_hook(__FILE__, 'pay100_deactivate');
 
 // Deactivation Function
@@ -53,14 +74,6 @@ function pay100_deactivate() {
 }
 
 // Uninstall Function
-function pay100_uninstall() {
-    delete_option('enabled');
-    delete_option('title');
-    delete_option('business_name');
-    delete_option('description');
-    delete_option('public_key');
-    delete_option('secret_key');
-}
 
 
 add_action( 'woocommerce_payment_gateways', 'add_100Pay_gateway_class' );
@@ -90,10 +103,10 @@ function init_100Pay_gateway_class() {
             $this->init_form_fields();
             $this->init_settings();
 
-            $this->title = $this->get_option('title');
-            $this->description = $this->get_option('description');
-            $this->enabled = $this->get_option('enabled');
-            $this->webhook_url = $this->get_option('webhook_url');
+            $this->title = $this->get_option('pay100_title');;
+            $this->description = $this->get_option('pay100_description');;
+            $this->enabled = $this->get_option('pay100_enabled');
+            $this->webhook_url = $this->get_option('pay100_webhook_url');
             $this->verification_token = $this->get_option('pay100_verification_token');
 
             // This action hook saves the settings
@@ -106,52 +119,52 @@ function init_100Pay_gateway_class() {
 
         public function init_form_fields() {
             $this->form_fields = array(
-                'enabled' => array(
+                'pay100_enabled' => array(
                     'title'       => 'Enable/Disable',
                     'label'       => 'Enable 100Pay Payment Gateway',
                     'type'        => 'checkbox',
                     'description' => '',
                     'default'     => 'yes'
                 ),
-                'title' => array(
+                'pay100_title' => array(
                     'title'       => '100Pay Payment Gateway',
                     'type'        => 'text',
                     'description' => 'Pay with 100Pay.',
                     'default'     => 'Pay With 100Pay',
                     'desc_tip'    => true,
                 ),
-                'business_name' => array(
-                    'title'       => '100Pay Business Name',
-                    'type'        => 'text',
-                    'description' => '100Pay Business Name',
-                    'default'     => ' ',
-                    'desc_tip'    => true,
-                ),
-                'description' => array(
+                'pay100_description' => array(
                     'title'       => 'Description',
                     'type'        => 'textarea',
                     'description' => 'You can make crypto payment using our payment gateway.',
                     'default'     => 'You can make crypto payment using our payment gateway.',
                 ),
-                'public_key' => array(
+                'pay100_business_name' => array(
+                    'title'       => '100Pay Business Name',
+                    'type'        => 'text',
+                    'description' => '100Pay Business Name',
+                    'default'     => '',
+                    'desc_tip'    => true,
+                ),
+                'pay100_public_key' => array(
                     'title'       => 'Public Key',
                     'type'        => 'textarea',
                     'description' => '100Pay Public Key',
-                    'default'     => ' ',
+                    'default'     => '',
                 ),
-                'secret_key' => array(
+                'pay100_secret_key' => array(
                     'title'       => 'Secret Key',
                     'type'        => 'textarea',
                     'description' => '100Pay Secret Key',
-                    'default'     => ' ',
+                    'default'     => '',
                 ),
                 'pay100_verification_token' => array(
                     'title'       => 'Verification Token',
                     'type'        => 'textarea',
                     'description' => '100Pay Merchant Verification Token',
-                    'default'     => ' ',
+                    'default'     => '',
                 ),
-                'webhook_url' => array(
+                'pay100_webhook_url' => array(
                     'title'       => 'Webhook URL',
                     'type'        => 'textarea',
                     'description' => 'Please copy this webhook URL and paste on the webhook section on your dashboard',
@@ -165,14 +178,14 @@ function init_100Pay_gateway_class() {
 
         public function generate_webhook_url() {
             // Check if the webhook url is already set in the options
-            $webhook_url = get_option('webhook_url');
+            $webhook_url = get_option('pay100_webhook_url');
 
             // Generate a webhook url if not set
             if (empty($webhook_url)) {
                 
                 $site_domain = get_option('siteurl');
                 $route_value = bin2hex(random_bytes(10));
-                $webhook_url = 'https://' . $site_domain . '/webhook/' .$route_value;
+                $webhook_url = $site_domain . '/wp-json/webhook/' .$route_value;
                 
 
                 // Save the webhhok URL to options
@@ -234,8 +247,8 @@ function init_100Pay_gateway_class() {
                 $order = wc_get_order( $order_id );
                     
 
-                $api_key = $this->get_option( 'secret_key' );
-                $business_name = $this->get_option( 'business_name' );
+                $api_key = $this->get_option( 'pay100_secret_key' );
+                $business_name = $this->get_option( 'pay100_business_name' );
 
                 
 
@@ -346,7 +359,7 @@ function init_100Pay_gateway_class() {
         }
 
         public function register_webhooks_endpoint() {
-            $url = $this->get_option('webhook_url');
+            $url = $this->get_option('pay100_webhook_url');
             $split_result = $this->split_domain_url( $url );
             
             $webhook_path = $split_result['path'];
@@ -400,15 +413,25 @@ function init_100Pay_gateway_class() {
     
     
                                 // Save transaction to DB
-                                $this->pay100_save_transaction( $customer_id, $reference_id );
+                                $save_transaction = $this->pay100_save_transaction( $customer_id, $reference_id );
+
+                                if ($save_transaction['status'] === true) {
     
-                                return new WP_REST_Response(
-                                    array(
-                                        'status'=> 'success',
-                                        'remark'=> 'Payment Completed',
-                                    ),
-                                    200
-                                );
+                                    return new WP_REST_Response(
+                                        array(
+                                            'status'=> 'success',
+                                            'remark'=> 'Payment Completed',
+                                        ),
+                                        200
+                                    );
+                                } elseif ($save_transaction['status'] === false) {
+                                    return new WP_REST_Response(
+                                        array(
+                                            'status'=> 'error',
+                                        ),
+                                        400
+                                    );
+                                }
                             
                             } 
                             // OverPaid && UnderPaid Checks
@@ -524,7 +547,7 @@ function init_100Pay_gateway_class() {
 
             $table_name =  $wpdb->prefix .'pay100_transactions';
 
-            $wpdb->insert(
+            $transaction_status = $wpdb->insert(
                 $table_name,
                 array(
                     'reference_id' => $reference_id,
@@ -532,7 +555,22 @@ function init_100Pay_gateway_class() {
                 )
             );
 
-            return true;
+            if ($transaction_status === false) {
+                return array(
+                    "status" => false,
+                    "message" => $wpdb->last_error,
+                );
+            } elseif ($transaction_status === true) {
+                return array(
+                    "status"=> true,
+                    "message" => "success"
+                );
+            } else {
+                return array(
+                    "status"=> false,
+                    "message"=> $wpdb->last_error,
+                );
+            }
 
         }
 
