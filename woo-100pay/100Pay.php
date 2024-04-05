@@ -91,6 +91,8 @@ function init_100Pay_gateway_class() {
         public function __construct() {
 
             $this->id = 'pay100';
+            $this->icon = dirname(__FILE__) . '/image/100pay.svg';
+            $this->has_fields = false;
             $this->method_title = '100Pay Payment Gateway';
             $this->method_description = 'You can make your crypto payments using our payment gateway.';
             $this->method_icon = dirname(__FILE__) . '/image/100pay.svg';
