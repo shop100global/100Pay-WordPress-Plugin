@@ -12,7 +12,7 @@ Author: Chika Precious Benjamin
 
 Author URI: https://100pay.co/
 
-License: GPLv2 or later 
+License: GPLv2 
 
 Text Domain: 100pay
 
@@ -59,7 +59,13 @@ function pay100_uninstall() {
 
     // Delete Option
 
-    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name IN ('pay_100_enabled', 'pay_100_business_name', 'pay_100_public_key', 'pay_100_secret_key', 'pay100_verification_token')");
+    delete_option( 'secret_key' );
+    delete_option( 'business_name' );
+    delete_option( 'public_key' );
+    delete_option( 'secret_key' );
+    delete_option( 'pay_verification_token' );
+    delete_option( 'webhook_url' );
+    delete_option( 'enabled' );
 
 
     // Delete Plugin Settings
@@ -77,7 +83,7 @@ function pay100_deactivate() {
 
 
 add_action( 'woocommerce_payment_gateways', 'add_100Pay_gateway_class' );
-function add_100Pay_gateway_class() {
+function add_100Pay_gateway_class( $gateways ) {
     $gateways[] = 'WC_100Pay_Gateway';
     return $gateways;
 }
@@ -105,11 +111,11 @@ function init_100Pay_gateway_class() {
             $this->init_form_fields();
             $this->init_settings();
 
-            $this->title = $this->get_option('pay100_title');;
-            $this->description = $this->get_option('pay100_description');;
-            $this->enabled = $this->get_option('pay100_enabled');
-            $this->webhook_url = $this->get_option('pay100_webhook_url');
-            $this->verification_token = $this->get_option('pay100_verification_token');
+            $this->title = $this->get_option('title');
+            $this->description = $this->get_option('description');
+            $this->enabled = $this->get_option('enabled');
+            $this->webhook_url = $this->get_option('webhook_url');
+            $this->verification_token = $this->get_option('pay_verification_token');
 
             // This action hook saves the settings
             add_filter( 'wc_order_statuses', array( $this, 'add_additional_custom_statuses_to_order_statuses' ) );
@@ -121,52 +127,52 @@ function init_100Pay_gateway_class() {
 
         public function init_form_fields() {
             $this->form_fields = array(
-                'pay100_enabled' => array(
+                'enabled' => array(
                     'title'       => 'Enable/Disable',
                     'label'       => 'Enable 100Pay Payment Gateway',
                     'type'        => 'checkbox',
                     'description' => '',
                     'default'     => 'yes'
                 ),
-                'pay100_title' => array(
+                'title' => array(
                     'title'       => '100Pay Payment Gateway',
                     'type'        => 'text',
                     'description' => 'Pay with 100Pay.',
                     'default'     => 'Pay With 100Pay',
                     'desc_tip'    => true,
                 ),
-                'pay100_description' => array(
+                'description' => array(
                     'title'       => 'Description',
                     'type'        => 'textarea',
                     'description' => 'You can make crypto payment using our payment gateway.',
                     'default'     => 'You can make crypto payment using our payment gateway.',
                 ),
-                'pay100_business_name' => array(
+                'business_name' => array(
                     'title'       => '100Pay Business Name',
                     'type'        => 'text',
                     'description' => '100Pay Business Name',
                     'default'     => '',
                     'desc_tip'    => true,
                 ),
-                'pay100_public_key' => array(
+                'public_key' => array(
                     'title'       => 'Public Key',
                     'type'        => 'textarea',
                     'description' => '100Pay Public Key',
                     'default'     => '',
                 ),
-                'pay100_secret_key' => array(
+                'secret_key' => array(
                     'title'       => 'Secret Key',
                     'type'        => 'textarea',
                     'description' => '100Pay Secret Key',
                     'default'     => '',
                 ),
-                'pay100_verification_token' => array(
+                'pay_verification_token' => array(
                     'title'       => 'Verification Token',
                     'type'        => 'textarea',
                     'description' => '100Pay Merchant Verification Token',
                     'default'     => '',
                 ),
-                'pay100_webhook_url' => array(
+                'webhook_url' => array(
                     'title'       => 'Webhook URL',
                     'type'        => 'textarea',
                     'description' => 'Please copy this webhook URL and paste on the webhook section on your dashboard',
@@ -180,7 +186,7 @@ function init_100Pay_gateway_class() {
 
         public function generate_webhook_url() {
             // Check if the webhook url is already set in the options
-            $webhook_url = get_option('pay100_webhook_url');
+            $webhook_url = get_option('webhook_url');
 
             // Generate a webhook url if not set
             if (empty($webhook_url)) {
@@ -206,8 +212,8 @@ function init_100Pay_gateway_class() {
             $parts = explode('/', trim($path, '/'));
 
             return array(
-                'path' => $parts[0],
-                'id' => '/' . $parts[1],
+                'path' => $parts[2],
+                'id' => '/' . $parts[3],
             );
         }
 
@@ -249,8 +255,8 @@ function init_100Pay_gateway_class() {
                 $order = wc_get_order( $order_id );
                     
 
-                $api_key = $this->get_option( 'pay100_secret_key' );
-                $business_name = $this->get_option( 'pay100_business_name' );
+                $api_key = $this->get_option( 'secret_key' );
+                $business_name = $this->get_option( 'business_name' );
 
                 
 
@@ -336,13 +342,13 @@ function init_100Pay_gateway_class() {
                         },
                         metadata: {
                             is_approved: "yes",
-                            order_id: '<?php echo $order_key; ?>', // optional
+                            order_id: "<?php echo $order_key; ?>", // optional
                             charge_ref: "REF" // optional, you can add more fields
                         },
                         call_back_url: "http://localhost:8000/verifyorder/",
                         onClose: function(msg) {
                             alert("You just closed the crypto payment modal.");
-                            window.location.href = '<?php echo $redirect_url; ?>'
+                            window.location.href = "<?php echo $redirect_url; ?>"
                         },
                         onPayment: function(reference) {
                             alert("New Payment detected with reference " + reference);
@@ -361,7 +367,7 @@ function init_100Pay_gateway_class() {
         }
 
         public function register_webhooks_endpoint() {
-            $url = $this->get_option('pay100_webhook_url');
+            $url = $this->get_option('webhook_url');
             $split_result = $this->split_domain_url( $url );
             
             $webhook_path = $split_result['path'];
@@ -390,7 +396,7 @@ function init_100Pay_gateway_class() {
                 
                 $incoming_verification_token = $request->get_header('HTTP_VERIFICATION_TOKEN');
 
-                $current_verification_token = $this->get_option('pay100_verification_token', '');
+                $current_verification_token = $this->get_option('pay_verification_token', '');
                 $payment_status = $request['charge']['status']['value'];
                 $payment_amount = $request["charge"]["status"]["total_paid"];
                 $payment_currency = $request["charge"]["billing"]["currency"];
