@@ -1,4 +1,4 @@
-# 100Pay Woocommerce Payment Gateway
+=== 100Pay Woocommerce Payment Gateway ===
 
 
 100Pay is a cryptocurrency gateway that makes it easy for merchant to accept payment in crypto currencies and receive fiat currency.
