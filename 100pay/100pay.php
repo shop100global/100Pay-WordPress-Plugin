@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: 100Pay Checkout
+Plugin Name: 100Pay Checkout for WooCommerce
 
 Plugin URI: https://100pay.co/ 
 
@@ -253,6 +253,7 @@ function init_100Pay_gateway_class() {
                 $order_id = wc_get_order_id_by_order_key( $_GET['key'] );
                 $order_key = $_GET['key'];
                 $order = wc_get_order( $order_id );
+                $siteurl = get_option('siteurl');
                     
 
                 $api_key = $this->get_option( 'secret_key' );
@@ -345,7 +346,7 @@ function init_100Pay_gateway_class() {
                             order_id: "<?php echo $order_key; ?>", // optional
                             charge_ref: "REF" // optional, you can add more fields
                         },
-                        call_back_url: "http://localhost:8000/verifyorder/",
+                        call_back_url: "<?php echo $siteurl; ?>"/verifyorder/",
                         onClose: function(msg) {
                             alert("You just closed the crypto payment modal.");
                             window.location.href = "<?php echo $redirect_url; ?>"
