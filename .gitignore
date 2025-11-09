@@ -1,3 +1,5 @@
 
 dev_src
 node_modules
+.kiro/specs
+.vscode

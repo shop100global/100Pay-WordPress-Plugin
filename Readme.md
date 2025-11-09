@@ -305,7 +305,7 @@ shop100Pay is not defined
 ## 📚 Resources
 
 - **Setup Guide**: [Complete WordPress Integration Guide](https://100pay.co/blog/how-to-accept-crypto-payments-on-your-wordpress-woocommerce-store-with-100-pay-checkout)
-- **API Documentation**: [100Pay API Docs](https://100pay.co/docs)
+- **API Documentation**: [100Pay API Docs](https://docs.100pay.co)
 - **Dashboard**: [100Pay Merchant Dashboard](https://dashboard.100pay.co)
 - **Support**: support@100pay.co
 - **Website**: [100pay.co](https://100pay.co)
