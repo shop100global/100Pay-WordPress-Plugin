@@ -1,4 +1,6 @@
 <?php
+defined('ABSPATH') || exit;
+
 use Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType;
 
 final class WC_100Pay_Gateway_Blocks_Support extends AbstractPaymentMethodType {

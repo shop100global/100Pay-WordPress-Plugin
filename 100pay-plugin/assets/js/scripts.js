@@ -13,7 +13,7 @@ function onloadActionSet() {
 
 
 function loadPaymentButton() {
-    const button = $('<button class="sticky-side-button">Pay with 100Pay</button>');
+    const button = $('<button class="sticky-side-button">Pay with Crypto</button>');
     button.click(displayPaymentForm())
     $('body').append(button);
 };
