@@ -14,7 +14,7 @@ Author URI: https://100pay.co/
 
 License: GPLv2 
 
-Text Domain: 100pay
+Text Domain: 100pay-checkout
 
 */
 

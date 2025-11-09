@@ -1,7 +1,9 @@
-=== 100Pay Checkout for WooCommerce ===
+=== 100Pay Checkout ===
+Contributors: 100pay
 Tags: crypto-payment-gateway, crypto payments, 100Pay, Bitcoin
 Requires at least: v6.0
 Tested up to: v6.4.3
+Stable tag: 1.0
 Requires PHP: v8.0
 License: GPLv2
 
